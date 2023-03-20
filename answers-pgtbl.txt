@@ -1,0 +1,13 @@
+1. the syscall uptime.
+    In memory, a page is allocated to store the values of ticks. 
+    Map the corresponding address to the same physical page in each process's page table and assign read-only permission. 
+    Each time a time-slice interrupt occurs, 
+    the corresponding interrupt handler updates the values within the physical page
+
+2. page0 flag: UXWRV, 
+    page2 flag: UXWRV,
+    so they are both text section.
+
+    page1 flag: XWRV, so it can't be read or wrote by user code.
+
+    the third to last page flag: RV, so it should be the kernel code
