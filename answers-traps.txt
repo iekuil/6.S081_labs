@@ -1,0 +1,24 @@
+1. 
+    normally a0-a7.
+    in this case: a0, a1, a2;
+    and a2 holds the value 13
+
+2. 
+    The statement in which the main function calls f is optimized away by the compiler, 
+    so the main function does not call f.
+
+    f calls g at offset 14
+
+3. 0x630
+
+4. 0x38
+
+5. 
+    the output should be "He110 World";
+    i should be 0x726c6400;
+    just keep 57616 the statement
+
+6. 
+    when calling printf, the argument 3 comes from the a2 register,
+    but the code doesn't modify the value in a2, 
+    so the output could be anything depends on the status of executing.
