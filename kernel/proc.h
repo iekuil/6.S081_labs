@@ -110,5 +110,5 @@ struct proc {
   int ticks_left;
   uint64  handler;
 
-  uint64 epc_bak;
+  struct trapframe trapframe_bak;
 };

@@ -82,7 +82,7 @@ usertrap(void)
       p->ticks_left--;
       if(p->ticks_left == 0){
         p->ticks_left = p->interval;
-        p->epc_bak = p->trapframe->epc;
+        p->trapframe_bak = *(p->trapframe);
         p->trapframe->epc = p->handler;
         usertrapret();
       }
