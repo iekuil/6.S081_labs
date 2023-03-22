@@ -111,4 +111,5 @@ struct proc {
   uint64  handler;
 
   struct trapframe trapframe_bak;
+  int alarming;
 };

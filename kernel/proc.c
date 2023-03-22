@@ -120,6 +120,7 @@ found:
   p->pid = allocpid();
   p->state = USED;
   p->interval = 0;
+  p->alarming = 0;
   p->ticks_left = 0;
   p->handler = 0;
 

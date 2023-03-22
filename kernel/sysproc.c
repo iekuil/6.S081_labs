@@ -123,5 +123,6 @@ sys_sigreturn(void)
 {
   struct proc *p = myproc();
   *(p->trapframe) = p->trapframe_bak;
+  p->alarming = 0;
   return 0;
 }

@@ -80,14 +80,15 @@ usertrap(void)
   if(which_dev == 2){
     if(p->interval){
       p->ticks_left--;
-      if(p->ticks_left == 0){
+      if(p->ticks_left <= 0 && p->alarming == 0){
+        p->alarming = 1;
         p->ticks_left = p->interval;
         p->trapframe_bak = *(p->trapframe);
         p->trapframe->epc = p->handler;
         usertrapret();
       }
     }
-    //yield();
+    yield();
   }
 
 
