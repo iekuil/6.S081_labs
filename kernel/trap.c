@@ -67,7 +67,9 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else {
+  }else if( !copy_on_write() ){
+
+  }else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
@@ -218,3 +220,32 @@ devintr()
   }
 }
 
+int copy_on_write()
+{
+  struct proc *p = myproc();
+
+  if(r_scause() != 15)
+    return -1;
+
+  uint64 va = r_stval();
+  pte_t* pte = walk(p->pagetable, va, 0);
+
+  if (!(*pte & PTE_COW))
+    return -1;
+
+  uint64 pa = PTE2PA(*pte);
+  uint flags = (PTE_FLAGS(*pte) & ~PTE_COW) | PTE_W ;
+  uint64 mem;
+
+  if((mem = (uint64)kalloc()) == 0)
+    return -1;
+      
+  memmove((char*)mem, (char*)pa, PGSIZE);
+  uvmunmap(p->pagetable, PGROUNDDOWN(va), 1, 1);
+  //printf("va:%p, old_pa:%p, new_pa:%p\n", PGROUNDDOWN(va), pa, mem);
+  if(mappages(p->pagetable, PGROUNDDOWN(va), PGSIZE, (uint64)mem, flags) != 0){
+      return -1;
+    }
+  //p->trapframe->epc -= 4;
+  return 0;
+}

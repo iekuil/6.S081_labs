@@ -64,6 +64,10 @@ void*           kalloc(void);
 void            kfree(void *);
 void            kinit(void);
 
+void            ref_inc(uint64 pa);
+void            ref_dec(uint64 pa);
+int             get_refcount(uint64 pa);
+
 // log.c
 void            initlog(int, struct superblock*);
 void            log_write(struct buf*);
@@ -80,6 +84,8 @@ int             pipewrite(struct pipe*, uint64, int);
 void            printf(char*, ...);
 void            panic(char*) __attribute__((noreturn));
 void            printfinit(void);
+
+void            backtrace();
 
 // proc.c
 int             cpuid(void);
@@ -146,6 +152,8 @@ void            trapinithart(void);
 extern struct spinlock tickslock;
 void            usertrapret(void);
 
+int             copy_on_write();
+
 // uart.c
 void            uartinit(void);
 void            uartintr(void);
@@ -170,6 +178,8 @@ uint64          walkaddr(pagetable_t, uint64);
 int             copyout(pagetable_t, uint64, char *, uint64);
 int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);
+
+pte_t *         walk(pagetable_t pagetable, uint64 va, int alloc);
 
 // plic.c
 void            plicinit(void);

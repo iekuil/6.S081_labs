@@ -15,6 +15,8 @@ extern char etext[];  // kernel.ld sets this to end of kernel code.
 
 extern char trampoline[]; // trampoline.S
 
+extern char end[];
+
 // Make a direct-map page table for the kernel.
 pagetable_t
 kvmmake(void)
@@ -22,6 +24,7 @@ kvmmake(void)
   pagetable_t kpgtbl;
 
   kpgtbl = (pagetable_t) kalloc();
+
   memset(kpgtbl, 0, PGSIZE);
 
   // uart registers
@@ -35,6 +38,7 @@ kvmmake(void)
 
   // map kernel text executable and read-only.
   kvmmap(kpgtbl, KERNBASE, KERNBASE, (uint64)etext-KERNBASE, PTE_R | PTE_X);
+
 
   // map kernel data and the physical RAM we'll make use of.
   kvmmap(kpgtbl, (uint64)etext, (uint64)etext, PHYSTOP-(uint64)etext, PTE_R | PTE_W);
@@ -143,14 +147,19 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   if(size == 0)
     panic("mappages: size");
   
+  
   a = PGROUNDDOWN(va);
   last = PGROUNDDOWN(va + size - 1);
   for(;;){
+    //printf("mapping: va-%p to pa-%p\n", PGROUNDDOWN(a), pa);
     if((pte = walk(pagetable, a, 1)) == 0)
       return -1;
     if(*pte & PTE_V)
       panic("mappages: remap");
     *pte = PA2PTE(pa) | perm | PTE_V;
+    
+    if(pa > (uint64)end )
+      ref_inc(pa);
     if(a == last)
       break;
     a += PGSIZE;
@@ -180,9 +189,17 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
       panic("uvmunmap: not a leaf");
     if(do_free){
       uint64 pa = PTE2PA(*pte);
+      if(pa > (uint64)end )
+        ref_dec(pa);
+      *pte = 0;
       kfree((void*)pa);
+    }else{
+      uint64 pa = PTE2PA(*pte);
+      if(pa > (uint64)end )
+        ref_dec(pa);
+      *pte = 0;
     }
-    *pte = 0;
+    //*pte = 0;
   }
 }
 
@@ -303,20 +320,25 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
+  //char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
+    //pa = PTE2PA(*pte);
+    //flags = PTE_FLAGS(*pte);
+    //if((mem = kalloc()) == 0)
+    //  goto err;
+    //memmove(mem, (char*)pa, PGSIZE);
+
+    *pte = (*pte & ~PTE_W) | PTE_COW ;
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+
+    if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
+      //kfree(mem);
       goto err;
     }
   }
