@@ -369,15 +369,41 @@ int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
   uint64 n, va0, pa0;
+  pte_t *pte;
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
     pa0 = walkaddr(pagetable, va0);
+    pte = walk(pagetable, va0, 0);
+
+
     if(pa0 == 0)
       return -1;
     n = PGSIZE - (dstva - va0);
     if(n > len)
       n = len;
+    
+    if(!(*pte & PTE_W))
+    {
+      if(!(*pte & PTE_COW))
+        return -1;
+      
+      uint64 pa = PTE2PA(*pte);
+      uint flags = (PTE_FLAGS(*pte) & ~PTE_COW) | PTE_W ;
+      uint64 mem;
+
+      if((mem = (uint64)kalloc()) == 0)
+        return -1;
+      
+      memmove((char*)mem, (char*)pa, PGSIZE);
+      uvmunmap(pagetable, PGROUNDDOWN(va0), 1, 1);
+      
+      if(mappages(pagetable, PGROUNDDOWN(va0), PGSIZE, (uint64)mem, flags, 1) != 0){
+          return -1;
+        }
+      va0 = PGROUNDDOWN(dstva);
+      pa0 = walkaddr(pagetable, va0);
+    }
     memmove((void *)(pa0 + (dstva - va0)), src, n);
 
     len -= n;
