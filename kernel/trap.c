@@ -243,7 +243,7 @@ int copy_on_write()
   memmove((char*)mem, (char*)pa, PGSIZE);
   uvmunmap(p->pagetable, PGROUNDDOWN(va), 1, 1);
   //printf("va:%p, old_pa:%p, new_pa:%p\n", PGROUNDDOWN(va), pa, mem);
-  if(mappages(p->pagetable, PGROUNDDOWN(va), PGSIZE, (uint64)mem, flags) != 0){
+  if(mappages(p->pagetable, PGROUNDDOWN(va), PGSIZE, (uint64)mem, flags, 1) != 0){
       return -1;
     }
   //p->trapframe->epc -= 4;
