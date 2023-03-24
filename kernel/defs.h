@@ -67,6 +67,7 @@ void            kinit(void);
 void            ref_inc(uint64 pa);
 void            ref_dec(uint64 pa);
 int             get_refcount(uint64 pa);
+void            set_refcount(uint64 pa, int value);
 
 // log.c
 void            initlog(int, struct superblock*);

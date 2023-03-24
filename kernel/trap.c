@@ -228,6 +228,8 @@ int copy_on_write()
     return -1;
 
   uint64 va = r_stval();
+  if(va >= MAXVA)
+    return -1;
   pte_t* pte = walk(p->pagetable, va, 0);
 
   if (!(*pte & PTE_COW))

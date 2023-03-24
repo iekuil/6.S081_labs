@@ -187,18 +187,13 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
       panic("uvmunmap: not mapped");
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
-    if(do_free){
-      uint64 pa = PTE2PA(*pte);
-      if(pa > (uint64)end )
-        ref_dec(pa);
-      *pte = 0;
+
+    uint64 pa = PTE2PA(*pte);
+    ref_dec(pa);
+    *pte = 0;
+    
+    if(do_free)
       kfree((void*)pa);
-    }else{
-      uint64 pa = PTE2PA(*pte);
-      if(pa > (uint64)end )
-        ref_dec(pa);
-      *pte = 0;
-    }
     //*pte = 0;
   }
 }
@@ -373,6 +368,8 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
+    if(va0 >= MAXVA)
+      return -1;
     pa0 = walkaddr(pagetable, va0);
     pte = walk(pagetable, va0, 0);
 
@@ -401,7 +398,6 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
       if(mappages(pagetable, PGROUNDDOWN(va0), PGSIZE, (uint64)mem, flags, 1) != 0){
           return -1;
         }
-      va0 = PGROUNDDOWN(dstva);
       pa0 = walkaddr(pagetable, va0);
     }
     memmove((void *)(pa0 + (dstva - va0)), src, n);

@@ -65,6 +65,7 @@ kfree(void *pa)
   r->next = kmem.freelist;
   kmem.freelist = r;
   release(&kmem.lock);
+  set_refcount((uint64)pa, 0);
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -107,4 +108,11 @@ int get_refcount(uint64 pa)
 {
   uint64 index = (pa - KERNBASE) >> 12;
   return ref_count[index];
+}
+
+void set_refcount(uint64 pa, int value)
+{
+  uint64 index = (pa - KERNBASE) >> 12;
+  ref_count[index] = value;
+  return;
 }
