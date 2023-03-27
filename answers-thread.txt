@@ -1,0 +1,7 @@
+When two threads enter the insert function at the same time, 
+they read the original header pointer at the same time,
+assign e's next pointer to the header,
+and then assign e's address to the pointer to the header. 
+
+The slower thread's assignment overwrites the previous thread's assignment, 
+resulting in node loss.
