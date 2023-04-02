@@ -19,7 +19,8 @@ static struct mbuf *rx_mbufs[RX_RING_SIZE];
 // remember where the e1000's registers live.
 static volatile uint32 *regs;
 
-struct spinlock e1000_lock;
+struct spinlock e1000_r_lock;
+struct spinlock e1000_t_lock;
 
 // called by pci_init().
 // xregs is the memory address at which the
@@ -29,7 +30,8 @@ e1000_init(uint32 *xregs)
 {
   int i;
 
-  initlock(&e1000_lock, "e1000");
+  initlock(&e1000_r_lock, "e1000_r");
+  initlock(&e1000_t_lock, "e1000_t");
 
   regs = xregs;
 
@@ -103,6 +105,40 @@ e1000_transmit(struct mbuf *m)
   // a pointer so that it can be freed after sending.
   //
   
+  //intr_off();
+  acquire(&e1000_t_lock);
+  
+  //printf("transmit \n");
+
+  uint32 tdt = regs[E1000_TDT];
+  if ( tdt < 0 || tdt > TX_RING_SIZE-1 )
+  {
+    release(&e1000_t_lock);
+    //intr_on();
+    return -1;
+  }
+  if((tx_ring[tdt].status & E1000_TXD_STAT_DD) == 0)
+  { 
+    release(&e1000_t_lock);
+    //intr_on();
+    return -1;
+  }
+
+  if( tx_mbufs[tdt] )
+  {
+    mbuffree(tx_mbufs[tdt]);
+    tx_mbufs[tdt] = 0;
+  }
+  tx_ring[tdt].addr = (uint64)m->head;
+  tx_ring[tdt].length = m->len;
+  tx_ring[tdt].cmd = E1000_TXD_CMD_EOP | E1000_TXD_CMD_RS;
+  
+  tx_mbufs[tdt] = m;
+  regs[E1000_TDT] = (tdt + 1) % TX_RING_SIZE;
+
+  release(&e1000_t_lock);
+  //intr_on();
+
   return 0;
 }
 
@@ -115,6 +151,34 @@ e1000_recv(void)
   // Check for packets that have arrived from the e1000
   // Create and deliver an mbuf for each packet (using net_rx()).
   //
+  intr_off();
+  acquire(&e1000_r_lock);
+
+  //printf("recv\n");
+
+  uint32 rdt = (regs[E1000_RDT] + 1) % RX_RING_SIZE;
+
+  if((rx_ring[rdt].status & E1000_RXD_STAT_DD) == 0)
+  {
+    release(&e1000_r_lock);
+    intr_on();
+    return;
+  }
+  rx_mbufs[rdt]->len = rx_ring[rdt].length;
+  net_rx(rx_mbufs[rdt]);
+  
+  struct mbuf *new_buf = mbufalloc(0);
+  rx_ring[rdt].addr = (uint64)new_buf->head;
+  rx_ring[rdt].status = 0;
+  rx_mbufs[rdt] = new_buf;
+  regs[E1000_RDT] = rdt;  
+
+  printf("in recv, now the head:%d, tail:%d\n", regs[E1000_RDH], regs[E1000_RDT]);
+
+  release(&e1000_r_lock);
+  intr_on();
+
+  return;
 }
 
 void
