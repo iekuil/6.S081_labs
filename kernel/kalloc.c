@@ -62,11 +62,12 @@ kfree(void *pa)
 
   push_off();   //修改3：kfree会向当前cpu的freelist插入新的头
   int cpu_id = cpuid();
+  pop_off();
+
   acquire(&kmem.lock[cpu_id]);
   r->next = kmem.freelist[cpu_id];
   kmem.freelist[cpu_id] = r;
   release(&kmem.lock[cpu_id]);
-  pop_off();
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -79,49 +80,34 @@ kalloc(void)
 
   push_off();
   int cpu_id = cpuid();
-  acquire(&kmem.lock[cpu_id]);
-  r = kmem.freelist[cpu_id];
-  if(r)                               //修改5：kal从当前cpu的freelist中分配一个空闲页面
-    kmem.freelist[cpu_id] = r->next;
-  else{
-    for(int i=0; i < NCPU; i++){      
-      if(i == cpu_id)
-        continue;
-      if(i < cpu_id){   //保证锁获取的顺序相同，避免死锁
-        release(&kmem.lock[cpu_id]);
-        acquire(&kmem.lock[i]);
-        acquire(&kmem.lock[cpu_id]);
-      }else{
-        acquire(&kmem.lock[i]);
-      }
-      if(kmem.freelist[i]){                            //如果当前cpu的freelist没有空闲页面，把其他cpu的freelist抢过来 
-        kmem.freelist[cpu_id] = kmem.freelist[i];
-        kmem.freelist[i] = 0; 
-        if(i < cpu_id){
-          release(&kmem.lock[cpu_id]);
-          release(&kmem.lock[i]);
-          acquire(&kmem.lock[cpu_id]);
-        }else{
-          release(&kmem.lock[i]);
-        }
-        break;
-      }
-      if(i < cpu_id){
-        release(&kmem.lock[cpu_id]);
-        release(&kmem.lock[i]);
-        acquire(&kmem.lock[cpu_id]);
-      }else{
-        release(&kmem.lock[i]);
-      }
-    }
-    r = kmem.freelist[cpu_id];
-    if(r)
-      kmem.freelist[cpu_id] = r->next;
-  }
-  release(&kmem.lock[cpu_id]);
   pop_off();
 
-  if(r)
+  acquire(&kmem.lock[cpu_id]);
+
+  r = kmem.freelist[cpu_id];
+  if(r)                               //修改5：kal从当前cpu的freelist中分配一个空闲页面
+  {
+    kmem.freelist[cpu_id] = r->next;
     memset((char*)r, 5, PGSIZE); // fill with junk
+    release(&kmem.lock[cpu_id]);
+    return (void*)r;
+  }
+
+  release(&kmem.lock[cpu_id]);
+
+  for(int i=0; i < NCPU; i++){
+    if(i == cpu_id)
+      continue;
+    acquire(&kmem.lock[i]);
+
+    if(kmem.freelist[i]){
+      r = kmem.freelist[i];
+      kmem.freelist[i] = r->next;
+      release(&kmem.lock[i]);
+      memset((char*)r, 5, PGSIZE);
+      return (void*)r;
+    }
+    release(&kmem.lock[i]);
+  }
   return (void*)r;
 }
