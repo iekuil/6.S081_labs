@@ -9,6 +9,7 @@ struct buf {
   struct buf *next;
   uchar data[BSIZE];
 
-  uint ticks;   //修改1：添加一个时间戳
+  uint ticks;
+  struct spinlock refcnt_lock;
 };
 
