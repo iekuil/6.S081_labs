@@ -33,6 +33,7 @@ struct {
   // Sorted by how recently the buffer was used.
   // head.next is most recent, head.prev is least.
   struct buf head[NBUCKET];
+  struct spinlock biglock;
 } bcache;
 
 uint    //修改4：定义一个哈希函数 
@@ -46,6 +47,7 @@ binit(void)
 {
   //struct buf *b;
 
+  initlock(&bcache.biglock, "bcache.biglock");
   for(int i=0; i < NBUCKET; i++){   //修改5：初始化每个bucket的锁
     initlock(&bcache.lock[i], "bcache.bucket");
   }
@@ -57,8 +59,10 @@ binit(void)
   }
 
   for(int i=0; i < NBUF; i++){
-    bcache.buf[i].blockno = i % NBUCKET;
+    bcache.buf[i].blockno = 0;
     bcache.buf[i].valid = 0;
+    bcache.buf[i].ticks = ~0;
+    bcache.buf[i].refcnt = 0;
     bcache.buf[i].next = bcache.head[i % NBUCKET].next;
     bcache.buf[i].prev = &bcache.head[i % NBUCKET];
     initsleeplock(&bcache.buf[i].lock, "buffer");
@@ -74,6 +78,7 @@ binit(void)
 static struct buf*
 bget(uint dev, uint blockno)
 {
+  acquire(&bcache.biglock);
   struct buf *b;
   //printf("------- bget, blockno = %d\n", blockno);
 
@@ -88,6 +93,7 @@ bget(uint dev, uint blockno)
       release(&b->refcnt_lock);
       //printf("release 1\n");
       release(&bcache.lock[bucket_no]);
+      release(&bcache.biglock);
       acquiresleep(&b->lock);
       //printf("----end bget, blockno = %d\n", blockno);
       return b;
@@ -114,6 +120,7 @@ bget(uint dev, uint blockno)
     fb->refcnt = 1;
     release(&fb->refcnt_lock);
     release(&bcache.lock[bucket_no]);
+    release(&bcache.biglock);
     acquiresleep(&fb->lock);
     return fb;
   }
@@ -165,6 +172,7 @@ bget(uint dev, uint blockno)
     release(&fb->refcnt_lock);
     release(&bcache.lock[fb_bucketno]);
     release(&bcache.lock[bucket_no]);
+    release(&bcache.biglock);
     acquiresleep(&fb->lock);
     //printf("----end bget, blockno = %d\n", blockno);
     return fb;
@@ -213,6 +221,7 @@ bget(uint dev, uint blockno)
   release(&fb->refcnt_lock);
   release(&bcache.lock[fb_bucketno]);
   release(&bcache.lock[bucket_no]);
+  release(&bcache.biglock);
   acquiresleep(&fb->lock);
   //printf("----end bget, blockno = %d\n", blockno);
   return fb;
@@ -254,6 +263,7 @@ brelse(struct buf *b)
 
   //printf("------- brelse, blockno = %d\n", b->blockno);
   releasesleep(&b->lock);
+  acquire(&bcache.biglock);
   //printf("release b->lock, blockno=%d\n", b->blockno);
 
   //uint bucket_no;
@@ -268,6 +278,7 @@ brelse(struct buf *b)
 
   release(&b->refcnt_lock);
   //release(&bcache.lock[bucket_no]);
+  release(&bcache.biglock);
   return;
 }
 
@@ -281,9 +292,11 @@ bpin(struct buf *b) {
   //bucket_no = hash(blockno);
 
   //acquire(&bcache.lock[bucket_no]);
+  acquire(&bcache.biglock);
   acquire(&b->refcnt_lock);
   b->refcnt++;
   release(&b->refcnt_lock);
+  release(&bcache.biglock);
   //release(&bcache.lock[bucket_no]);
 }
 
@@ -297,9 +310,11 @@ bunpin(struct buf *b) {
   //bucket_no = hash(blockno);
 
   //acquire(&bcache.lock[bucket_no]);
+  acquire(&bcache.biglock);
   acquire(&b->refcnt_lock);
   b->refcnt--;
   release(&b->refcnt_lock);
+  release(&bcache.biglock);
   //release(&bcache.lock[bucket_no]);
 }
 
