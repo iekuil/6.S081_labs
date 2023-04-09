@@ -19,7 +19,7 @@ struct run {
 };
 
 struct {
-  struct spinlock lock[NCPU]; //修改1：每个cpu一把锁、一个freelist
+  struct spinlock lock[NCPU]; //kalloc-修改1：每个cpu一把锁、一个freelist
   struct run *freelist[NCPU];
 } kmem;
 
@@ -28,7 +28,7 @@ kinit()
 {
   for(int i=0; i < NCPU; i++)
   {
-    initlock(&kmem.lock[i], "kmem");  //修改2：初始化所有锁，即使有些锁不会被用上
+    initlock(&kmem.lock[i], "kmem");  //kalloc-修改2：初始化所有锁，即使有些锁不会被用上
     kmem.freelist[i] = 0;
   }
   freerange(end, (void*)PHYSTOP);
@@ -60,7 +60,7 @@ kfree(void *pa)
 
   r = (struct run*)pa;
 
-  push_off();   //修改3：kfree会向当前cpu的freelist插入新的头
+  push_off();   //kalloc-修改3：kfree会向当前cpu的freelist插入新的头
   int cpu_id = cpuid();
   pop_off();
 
@@ -85,7 +85,7 @@ kalloc(void)
   acquire(&kmem.lock[cpu_id]);
 
   r = kmem.freelist[cpu_id];
-  if(r)                               //修改5：kal从当前cpu的freelist中分配一个空闲页面
+  if(r)                               //kalloc-修改4：kal从当前cpu的freelist中分配一个空闲页面
   {
     kmem.freelist[cpu_id] = r->next;
     memset((char*)r, 5, PGSIZE); // fill with junk
