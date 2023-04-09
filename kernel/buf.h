@@ -9,7 +9,7 @@ struct buf {
   struct buf *next;
   uchar data[BSIZE];
 
-  uint ticks;
+  uint ticks;   //bcache-修改1：添加一个时间戳，以及一个用来保护refcnt的锁
   struct spinlock refcnt_lock;
 };
 

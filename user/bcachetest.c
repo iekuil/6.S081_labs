@@ -109,8 +109,8 @@ test0()
     }
   }
   m = ntas(0);
-  for(int i = 0; i < NCHILD; i++){
-    dir[0] = '0' + i;
+  for(int i = 0; i < NCHILD; i++){    //创建了文件又不删，偏偏writebig又是奔着写满磁盘去的，
+    dir[0] = '0' + i;                 //我说怎么usertests里的writebig死活过不了
     int pid = fork();
     if(pid < 0){
       printf("fork failed");
@@ -131,6 +131,22 @@ test0()
   for(int i = 0; i < NCHILD; i++){
     wait(0);
   }
+
+  for(int i = 0; i < NCHILD; i++){    //加个循环把之前创建的文件全删掉，writebig就能过了
+    dir[0] = '0' + i;
+    mkdir(dir);
+    if (chdir(dir) < 0) {
+      printf("chdir failed\n");
+      exit(1);
+    }
+    unlink(file);
+    if (chdir("..") < 0) {
+      printf("chdir failed\n");
+      exit(1);
+    }
+    unlink(dir);
+  }
+
   printf("test0 results:\n");
   n = ntas(1);
   if (n-m < 500)
