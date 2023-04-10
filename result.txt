@@ -1,19 +1,16 @@
-ubuntu_20_04@ubuntu:~/Desktop/xv6-labs-2021$ ./grade-lab-lock 
 make: “kernel/kernel”已是最新。
-== Test running kalloctest == (94.5s) 
+== Test running kalloctest == (62.5s) 
 == Test   kalloctest: test1 == 
   kalloctest: test1: OK 
 == Test   kalloctest: test2 == 
   kalloctest: test2: OK 
-== Test kalloctest: sbrkmuch == kalloctest: sbrkmuch: OK (14.6s) 
-== Test running bcachetest == (47.8s) 
+== Test kalloctest: sbrkmuch == kalloctest: sbrkmuch: OK (7.7s) 
+== Test running bcachetest == (8.6s) 
 == Test   bcachetest: test0 == 
   bcachetest: test0: OK 
 == Test   bcachetest: test1 == 
   bcachetest: test1: OK 
-== Test usertests == usertests: OK (280.0s) 
-    (Old xv6.out.usertests failure log removed)
+== Test usertests == usertests: OK (148.7s) 
 == Test time == 
 time: OK 
 Score: 70/70
-
