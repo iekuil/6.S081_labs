@@ -26,7 +26,7 @@ struct inode {
   short minor;
   short nlink;
   uint size;
-  uint addrs[NDIRECT+1];
+  uint addrs[NDIRECT+1+1];    //large files修改4：内存中的inode需要和磁盘的dinode保持同步
 };
 
 // map major device number to device functions.

@@ -377,8 +377,8 @@ iunlockput(struct inode *ip)
 static uint
 bmap(struct inode *ip, uint bn)
 {
-  uint addr, *a;
-  struct buf *bp;
+  uint addr, subaddr, *a, *suba;
+  struct buf *bp, *subbp;
 
   if(bn < NDIRECT){
     if((addr = ip->addrs[bn]) == 0)
@@ -389,16 +389,39 @@ bmap(struct inode *ip, uint bn)
 
   if(bn < NINDIRECT){
     // Load indirect block, allocating if necessary.
-    if((addr = ip->addrs[NDIRECT]) == 0)
+    if((addr = ip->addrs[NDIRECT]) == 0)    //判断间接映射表是否存在
       ip->addrs[NDIRECT] = addr = balloc(ip->dev);
-    bp = bread(ip->dev, addr);
-    a = (uint*)bp->data;
-    if((addr = a[bn]) == 0){
+    bp = bread(ip->dev, addr);    //通过间接映射表的块号，读取间接映射表的整个块的所有内容
+    a = (uint*)bp->data;    //读取间接映射表的某个表项，得到对应块的块号
+    if((addr = a[bn]) == 0){    //如果对应的块未分配，进行balloc
       a[bn] = addr = balloc(ip->dev);
       log_write(bp);
     }
+    brelse(bp);   //释放掉间接映射表所在的块
+    return addr;    //返回的addr是目标块在磁盘中的块号
+  }
+  bn -= NINDIRECT;
+
+  if(bn < NDBLINDIRECT){    //large files修改5：查找二级映射表中相应的块号
+
+    if((addr = ip->addrs[NDIRECT+1]) == 0)
+      ip->addrs[NDIRECT+1] = addr = balloc(ip->dev);
+    bp = bread(ip->dev, addr);    //读取二级映射表
+    a = (uint*)bp->data;
+    if((subaddr = a[bn / NINDIRECT]) == 0){   //读取对应的间接映射表的块号
+      a[bn / NINDIRECT] = subaddr = balloc(ip->dev);
+      log_write(bp);
+    }
+
+    subbp = bread(ip->dev, subaddr);    //读取间接映射表的块号
+    suba = (uint*)subbp->data;
+    if((subaddr = suba[bn % NINDIRECT]) == 0){    //读取对应的磁盘块的块号
+      suba[bn % NINDIRECT] = subaddr = balloc(ip->dev);
+      log_write(subbp); 
+    }
+    brelse(subbp);
     brelse(bp);
-    return addr;
+    return subaddr;
   }
 
   panic("bmap: out of range");
@@ -410,8 +433,8 @@ void
 itrunc(struct inode *ip)
 {
   int i, j;
-  struct buf *bp;
-  uint *a;
+  struct buf *bp, *subbp;
+  uint *a, *suba;
 
   for(i = 0; i < NDIRECT; i++){
     if(ip->addrs[i]){
@@ -430,6 +453,25 @@ itrunc(struct inode *ip)
     brelse(bp);
     bfree(ip->dev, ip->addrs[NDIRECT]);
     ip->addrs[NDIRECT] = 0;
+  }
+
+  if(ip->addrs[NDIRECT + 1]){   //large files修改6：用二重循环将二级映射表里面映射的所有块都释放掉
+    bp = bread(ip->dev, ip->addrs[NDIRECT + 1]);
+    a = (uint*)bp->data;
+
+    for(i = 0; i < NINDIRECT; i++){
+      subbp = bread(ip->dev, a[i]);
+      suba = (uint*)subbp->data;
+      for(j = 0; j < NINDIRECT; j++){
+        if(suba[j])
+          bfree(ip->dev, suba[j]);
+      }
+      brelse(subbp);
+    }
+
+    brelse(bp);
+    bfree(ip->dev, ip->addrs[NDIRECT + 1]);
+    ip->addrs[NDIRECT + 1] = 0;
   }
 
   ip->size = 0;
