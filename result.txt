@@ -1,0 +1,11 @@
+make: “kernel/kernel”已是最新。
+== Test running bigfile == running bigfile: OK (95.9s) 
+== Test running symlinktest == (0.7s) 
+== Test   symlinktest: symlinks == 
+  symlinktest: symlinks: OK 
+== Test   symlinktest: concurrent symlinks == 
+  symlinktest: concurrent symlinks: OK 
+== Test usertests == usertests: OK (248.1s) 
+== Test time == 
+time: OK 
+Score: 100/100

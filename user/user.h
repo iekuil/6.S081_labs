@@ -24,6 +24,8 @@ char* sbrk(int);
 int sleep(int);
 int uptime(void);
 
+int symlink(char *target, char *path);    //symbolic links修改3：添加用户态下的系统调用接口
+
 // ulib.c
 int stat(const char*, struct stat*);
 char* strcpy(char*, const char*);

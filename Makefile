@@ -188,7 +188,8 @@ UPROGS=\
 	$U/_grind\
 	$U/_wc\
 	$U/_zombie\
-
+	$U/_symlinktest\
+#symbolic links修改9：将用户态的测试代码添加到编译列表
 
 
 

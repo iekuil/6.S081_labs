@@ -292,6 +292,7 @@ sys_open(void)
   struct inode *ip;
   int n;
 
+
   if((n = argstr(0, path, MAXPATH)) < 0 || argint(1, &omode) < 0)
     return -1;
 
@@ -314,6 +315,35 @@ sys_open(void)
       end_op();
       return -1;
     }
+  }
+  int max_symlink_follow = 10;
+  char ref_path[MAXPATH];
+  struct inode *ref_ip;
+  int ref_path_len;
+  int i;
+
+  for(i = 0; i < max_symlink_follow; i++){    //symbolic links修改10：增加对symbolic link的处理
+    if((ip->type != T_SYMLINK) || (omode & O_NOFOLLOW))
+      break;
+    if((ref_path_len = readi(ip, 0, (uint64)ref_path, 0, MAXPATH)) < 0){
+      iunlockput(ip);
+      end_op();
+      return -1;
+    }  
+    if((ref_ip = namei(ref_path)) == 0){
+      iunlockput(ip);
+      end_op();
+      return -1;
+    }
+    iunlockput(ip);
+    ilock(ref_ip);
+    ip = ref_ip;
+  }
+
+  if((ip->type == T_SYMLINK) && !(omode & O_NOFOLLOW)){
+    iunlockput(ip);
+    end_op();
+    return -1;
   }
 
   if(ip->type == T_DEVICE && (ip->major < 0 || ip->major >= NDEV)){
@@ -482,5 +512,39 @@ sys_pipe(void)
     fileclose(wf);
     return -1;
   }
+  return 0;
+}
+
+
+uint64    //symbolic links修改6：实现实际执行系统调用函数功能的sys_symlink
+sys_symlink(void)
+{
+  char target[MAXPATH], path[MAXPATH];
+  struct inode *ip;
+  int target_len;
+
+  //printf("symlink 1\n");
+
+  if((target_len = argstr(0, target, MAXPATH)) < 0 || argstr(1, path, MAXPATH) < 0)
+    return -1;
+  //printf("target = %s, path = %s\n", target, path);
+
+  begin_op();
+  if((ip = create(path, T_SYMLINK, 0, 0)) == 0){
+    end_op();
+    return -1;
+  }
+  //printf("symlink 4\n");
+  //printf("symlink 3\n");
+  if(writei(ip, 0,  (uint64)target, 0, target_len) < target_len)   //writei里面会调用iupdate
+  {
+    iunlockput(ip);
+    end_op();
+    return -1;
+  }
+  iunlockput(ip);  
+  
+  end_op();
+  //printf("symlink 2\n");
   return 0;
 }

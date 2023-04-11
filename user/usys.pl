@@ -36,3 +36,5 @@ entry("getpid");
 entry("sbrk");
 entry("sleep");
 entry("uptime");
+
+entry("symlink");  #symbolic links修改2：添加系统调用的汇编跳转入口 
