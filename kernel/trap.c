@@ -6,6 +6,14 @@
 #include "proc.h"
 #include "defs.h"
 
+//mmap: 需要里面的宏定义
+#include "fcntl.h" 
+#include "sleeplock.h" 
+#include "fs.h"  
+#include "file.h"
+
+
+
 struct spinlock tickslock;
 uint ticks;
 
@@ -29,6 +37,102 @@ trapinithart(void)
   w_stvec((uint64)kernelvec);
 }
 
+int
+lazy_mmap(void)
+{
+  uint64 scause = r_scause();
+  
+  //判断是否属于page fault
+  if(scause != 12 && scause != 13 && scause != 15){
+    intr_on();
+    return -1;
+  }
+
+  //读取造成pagefault的地址
+  uint64 err_va = r_stval();
+  struct proc *p = myproc();
+
+  //粗略判断异常地址是否在mmap已分配的区域内
+  if(PGROUNDDOWN(err_va) <= p->highest_unused){
+    intr_on();
+    return -1;
+  }
+
+  //逐个比对p的每个vma的地址范围
+  //进一步判断异常地址是否属于mmap的映射范围，
+  //同时确定异常地址所属的vma
+  uint64 start_vp;
+  int map_size;
+  int vma_no;
+  int flag = 0;
+
+  for(vma_no = 0; vma_no < MAX_VMA; vma_no++){
+    start_vp = p->vma[vma_no].start_vp;
+    map_size = p->vma[vma_no].map_size;
+
+    if(err_va >= start_vp && err_va <= start_vp + map_size){
+      flag = 1;
+      break;
+    }
+  }
+
+  if(flag == 0){
+    intr_on();
+    return -1;
+  }
+
+  //利用vma的起始地址和当前异常地址，计算进行文件读取的起始处的偏移
+  off_t offset = p->vma[vma_no].offset;
+  uint64 page_to_map = PGROUNDDOWN(err_va);
+  offset = offset + (page_to_map - start_vp);
+
+  //分配物理页面并设置页表项
+  int prot = p->vma[vma_no].prot;
+  int prot_read = prot & PROT_READ;
+  int prot_write = prot & PROT_WRITE;
+  int prot_exec = prot & PROT_EXEC;
+
+  int perm = PTE_MMAP | PTE_U;
+  if(prot_read)
+    perm |= PTE_R;
+  if(prot_write)
+    perm |= PTE_W;
+  if(prot_exec)
+    perm |= PTE_X;
+
+  char *pa;
+  if((pa = kalloc()) == 0){
+    intr_on();
+    return -1;
+  }
+  memset(pa, 0, PGSIZE);
+
+  if(mappages(p->pagetable, page_to_map, PGSIZE, (uint64)pa, perm) < 0){
+    kfree(pa);
+    intr_on();
+    return -1;
+  }
+
+  //读取文件，写入相应的页面
+  int fd = p->vma[vma_no].fd;
+  struct file *f = p->ofile[fd];
+  struct inode *ip = f->ip;
+
+  //printf("maybe the lock 1.1\n");
+  ilock(ip);
+  //printf("maybe the lock 1.2\n");
+  if(readi(ip, 0, (uint64)pa, offset, PGSIZE) < 0){
+    kfree(pa);
+    iunlock(ip);
+    intr_on();
+    return -1;
+  };
+  //printf("maybe the lock 2.1\n");
+  iunlock(ip);
+  //printf("maybe the lock 2.2\n");
+  intr_on();
+  return 0;
+}
 //
 // handle an interrupt, exception, or system call from user space.
 // called from trampoline.S
@@ -67,6 +171,8 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+  } else if(lazy_mmap() == 0){
+    //lazy mmap
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());

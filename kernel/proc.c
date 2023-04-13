@@ -119,6 +119,18 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
+  p->highest_unused = TRAPFRAME - PGSIZE;
+
+  for(int i = 0; i < MAX_VMA; i++){   //mmap: 初始化vma
+    p->vma[i].used = 0;
+    p->vma[i].fd = 0;
+    p->vma[i].start_vp = 0;
+    p->vma[i].map_size = 0;
+    p->vma[i].prot = 0;
+    p->vma[i].file_length = 0;
+    p->vma[i].flags = 0;
+    p->vma[i].offset = 0;
+  }
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
@@ -164,6 +176,17 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  
+  for(int i = 0; i < MAX_VMA; i++){   //mmap: 初始化vma
+    p->vma[i].used = 0;
+    p->vma[i].fd = 0;
+    p->vma[i].start_vp = 0;
+    p->vma[i].map_size = 0;
+    p->vma[i].prot = 0;
+    p->vma[i].file_length = 0;
+    p->vma[i].flags = 0;
+    p->vma[i].offset = 0;
+  }
 }
 
 // Create a user page table for a given process,

@@ -188,6 +188,8 @@ UPROGS=\
 	$U/_grind\
 	$U/_wc\
 	$U/_zombie\
+	$U/_mmaptest\
+#mmap修改1：添加用户态的测试代码到编译列表
 
 
 

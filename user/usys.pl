@@ -36,3 +36,7 @@ entry("getpid");
 entry("sbrk");
 entry("sleep");
 entry("uptime");
+
+#mmap修改3：添加相应的系统调用汇编跳转代码
+entry("mmap");
+entry("munmap");

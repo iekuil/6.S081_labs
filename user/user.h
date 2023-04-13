@@ -24,6 +24,13 @@ char* sbrk(int);
 int sleep(int);
 int uptime(void);
 
+//mmap修改2：添加用户代码的系统调用接口
+#define size_t uint64
+#define off_t  uint64
+char* mmap(void *addr, size_t length, int prot, int flags,
+          int fd, off_t offset);
+int munmap(void *addr, size_t length);
+
 // ulib.c
 int stat(const char*, struct stat*);
 char* strcpy(char*, const char*);
