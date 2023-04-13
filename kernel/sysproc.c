@@ -123,6 +123,9 @@ sys_mmap(void)
         (2)在VMA中记录虚拟地址空间的起点和终点；
 */
   struct  proc *p = myproc();
+  printf("------in sys_mmap, pid %d\n", p->pid);
+  vmprint(p->pagetable, 3);
+  printf("------in sys_mmap, pid %d\n", p->pid);
   //void    *addr = 0;
   size_t  length;
   int     prot;
@@ -172,6 +175,7 @@ sys_mmap(void)
   filedup(p->ofile[fd]);
   p->highest_unused -= map_size;
 
+
   return p->vma[vma_no].start_vp;
 }
 
@@ -187,7 +191,7 @@ sys_munmap(void)
   */
   uint64 addr;
   size_t unmap_size;
-  if((argaddr(0, &addr) < 0) || (argaddr(2, &unmap_size) < 0)  ){
+  if((argaddr(0, &addr) < 0) || (argaddr(1, &unmap_size) < 0)  ){
     return -1;
   }
 
@@ -225,6 +229,9 @@ sys_munmap(void)
   if(mapped_flag == 0){
     return -1;
   }
+
+  //printf("---unmap: addr=%p, end at %p\n", addr, addr+unmap_size);
+  //printf("---unmap: target vma start at %p, end at %p\n", start_vp, start_vp+map_size);
 
   //进一步判断unmap的地址是否符合要求：
   //  位于映射范围的开头或结尾，
@@ -276,12 +283,16 @@ sys_munmap(void)
     p->vma[vma_no].offset = 0;
 
     fileclose(p->ofile[fd]);
+    vmprint(p->pagetable, 3);
+    printf("head and tail\n");
     return 0;
   } else if (unmap_at_head){
     p->vma[vma_no].start_vp = addr + unmap_size;
+    printf("head\n");
     return 0;
   } else{
     p->vma[vma_no].map_size -= unmap_size;
+    printf("tail\n");
     return 0;
   }
   return 0;

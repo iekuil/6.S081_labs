@@ -168,11 +168,12 @@ usertrap(void)
     // so don't enable until done with those registers.
     intr_on();
 
-    syscall();
+    syscall();  
+  } else if(lazy_mmap() == 0){
+    printf("lazy mmap:pid %d\n", p->pid);
+    //lazy mmap
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else if(lazy_mmap() == 0){
-    //lazy mmap
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
