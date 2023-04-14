@@ -119,11 +119,11 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
-  p->highest_unused = TRAPFRAME - PGSIZE;
+  p->highest_unused = TRAPFRAME;
 
   for(int i = 0; i < MAX_VMA; i++){   //mmap: 初始化vma
     p->vma[i].used = 0;
-    p->vma[i].fd = 0;
+    p->vma[i].filep = 0;
     p->vma[i].start_vp = 0;
     p->vma[i].map_size = 0;
     p->vma[i].prot = 0;
@@ -179,7 +179,7 @@ freeproc(struct proc *p)
   
   for(int i = 0; i < MAX_VMA; i++){   //mmap: 初始化vma
     p->vma[i].used = 0;
-    p->vma[i].fd = 0;
+    p->vma[i].filep = 0;
     p->vma[i].start_vp = 0;
     p->vma[i].map_size = 0;
     p->vma[i].prot = 0;

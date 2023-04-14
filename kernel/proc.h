@@ -90,7 +90,8 @@ enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 struct vma {
   int     used;
 
-  int     fd;
+  //int     fd;   //如果调用close(fd), p->ofile[fd]会被直接置0
+  uint64  filep;  //应该用struct file *来记录当前映射的文件
   uint64  start_vp;
   int     map_size;
 

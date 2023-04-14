@@ -41,7 +41,6 @@ int
 lazy_mmap(void)
 {
   uint64 scause = r_scause();
-  
   //判断是否属于page fault
   if(scause != 12 && scause != 13 && scause != 15){
     intr_on();
@@ -53,7 +52,7 @@ lazy_mmap(void)
   struct proc *p = myproc();
 
   //粗略判断异常地址是否在mmap已分配的区域内
-  if(PGROUNDDOWN(err_va) <= p->highest_unused){
+  if(PGROUNDDOWN(err_va) < p->highest_unused){
     intr_on();
     return -1;
   }
@@ -67,6 +66,8 @@ lazy_mmap(void)
   int flag = 0;
 
   for(vma_no = 0; vma_no < MAX_VMA; vma_no++){
+    if(p->vma[vma_no].used == 0)
+      continue;
     start_vp = p->vma[vma_no].start_vp;
     map_size = p->vma[vma_no].map_size;
 
@@ -114,22 +115,20 @@ lazy_mmap(void)
   }
 
   //读取文件，写入相应的页面
-  int fd = p->vma[vma_no].fd;
-  struct file *f = p->ofile[fd];
-  struct inode *ip = f->ip;
+  struct file *f ;
+  f = (struct file*)p->vma[vma_no].filep;  // ↓在出现pagefault之前，这里的f指针是0
 
-  //printf("maybe the lock 1.1\n");
+  struct inode *ip = f->ip;     //这一行的访问会出现page fault, 然后就panic: kerneltrap, why?
+                                //并且经过一次mmap、munmap之后再mmap才会出现
+
   ilock(ip);
-  //printf("maybe the lock 1.2\n");
   if(readi(ip, 0, (uint64)pa, offset, PGSIZE) < 0){
     kfree(pa);
     iunlock(ip);
     intr_on();
     return -1;
   };
-  //printf("maybe the lock 2.1\n");
   iunlock(ip);
-  //printf("maybe the lock 2.2\n");
   intr_on();
   return 0;
 }
@@ -170,7 +169,6 @@ usertrap(void)
 
     syscall();  
   } else if(lazy_mmap() == 0){
-    printf("lazy mmap:pid %d\n", p->pid);
     //lazy mmap
   } else if((which_dev = devintr()) != 0){
     // ok

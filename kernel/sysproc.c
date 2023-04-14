@@ -123,10 +123,6 @@ sys_mmap(void)
         (2)在VMA中记录虚拟地址空间的起点和终点；
 */
   struct  proc *p = myproc();
-  printf("------in sys_mmap, pid %d\n", p->pid);
-  vmprint(p->pagetable, 3);
-  printf("------in sys_mmap, pid %d\n", p->pid);
-  //void    *addr = 0;
   size_t  length;
   int     prot;
   int     flags;
@@ -164,8 +160,8 @@ sys_mmap(void)
   }
 
   p->vma[vma_no].used = 1;
-  p->vma[vma_no].fd = fd;
-  p->vma[vma_no].start_vp = p->highest_unused - map_size + PGSIZE;
+  p->vma[vma_no].filep = (uint64)p->ofile[fd];
+  p->vma[vma_no].start_vp = p->highest_unused - map_size;
   p->vma[vma_no].map_size = map_size;
   p->vma[vma_no].prot = prot;
   p->vma[vma_no].file_length = length;
@@ -174,7 +170,6 @@ sys_mmap(void)
 
   filedup(p->ofile[fd]);
   p->highest_unused -= map_size;
-
 
   return p->vma[vma_no].start_vp;
 }
@@ -201,9 +196,7 @@ sys_munmap(void)
 
   struct  proc *p = myproc();
 
-  //size_t  length;
   int     flags;
-  int     fd;
   off_t   offset = 0;
 
   uint64  start_vp;
@@ -212,7 +205,7 @@ sys_munmap(void)
   int mapped_flag = 0;
 
   //粗略判断给定的addr是否在mmap已映射的地址范围
-  if(addr <= p->highest_unused){
+  if(addr < p->highest_unused){
     return -1;
   }
 
@@ -229,9 +222,6 @@ sys_munmap(void)
   if(mapped_flag == 0){
     return -1;
   }
-
-  //printf("---unmap: addr=%p, end at %p\n", addr, addr+unmap_size);
-  //printf("---unmap: target vma start at %p, end at %p\n", start_vp, start_vp+map_size);
 
   //进一步判断unmap的地址是否符合要求：
   //  位于映射范围的开头或结尾，
@@ -252,18 +242,15 @@ sys_munmap(void)
   }
 
   //当需要写回时，计算文件中的偏移和长度
-  fd = p->vma[vma_no].fd;
   flags = p->vma[vma_no].flags;
   offset = p->vma[vma_no].offset;
 
   int write_back = flags & MAP_SHARED;
   int wb_offset;
-  //int wb_size;
 
   if(write_back){
     wb_offset = offset + addr - start_vp;
-    int fd = p->vma[vma_no].fd;
-    struct file *f = p->ofile[fd];
+    struct file *f = (struct file *)p->vma[vma_no].filep;
     struct inode *ip = f->ip;
 
     ilock(ip);
@@ -282,17 +269,15 @@ sys_munmap(void)
     p->vma[vma_no].flags = 0;
     p->vma[vma_no].offset = 0;
 
-    fileclose(p->ofile[fd]);
-    vmprint(p->pagetable, 3);
-    printf("head and tail\n");
+    fileclose((struct file *)p->vma[vma_no].filep);
+    p->vma[vma_no].filep = 0;
+
     return 0;
   } else if (unmap_at_head){
     p->vma[vma_no].start_vp = addr + unmap_size;
-    printf("head\n");
     return 0;
   } else{
     p->vma[vma_no].map_size -= unmap_size;
-    printf("tail\n");
     return 0;
   }
   return 0;
