@@ -101,6 +101,8 @@ lazy_mmap(void)
   if(prot_exec)
     perm |= PTE_X;
 
+  uvmunmap(p->pagetable, page_to_map, 1, 0);
+
   char *pa;
   if((pa = kalloc()) == 0){
     intr_on();

@@ -139,16 +139,26 @@ sys_mmap(void)
   int prot_read = prot & PROT_READ;
   int prot_write = prot & PROT_WRITE;
   int prot_exec = prot & PROT_EXEC;
+  int map_private = flags & MAP_PRIVATE;
 
+  //输入了没有意义的权限bit
   if(!prot_read && !prot_write && !prot_exec){
     return -1;
   }
 
+  //确认映射的权限没有超出此前open()文件的时候设置的权限
+  struct file *fp = p->ofile[fd];
+  if((!fp->readable && prot_read) || (!map_private && (!fp->writable && prot_write))){
+    return -1;
+  }
+
+  //判断即将映射的空间会不会溢出到内存中的堆部分
   map_size = PGROUNDUP(length);
   if(p->highest_unused - map_size < PGROUNDUP(p->sz)){
     return -1;
   }
 
+  //查找空闲的vma表项
   int vma_no;
   for(vma_no = 0; vma_no < MAX_VMA; vma_no++)
   {
@@ -168,9 +178,15 @@ sys_mmap(void)
   p->vma[vma_no].flags = flags;
   p->vma[vma_no].offset = offset;
 
+  //这里会先将相应的虚拟地址在页表上映射到0，并标记为用户不可见
+  //之后在trap处理的时候会unmap，再申请物理页面、mappage
+  //这么干主要是防止有的页还没被懒拷贝到内存里，就unmap了，从而在unmap的时候会由于不存在相应的页表项而panic
+  if(mappages(p->pagetable, p->vma[vma_no].start_vp, p->vma[vma_no].map_size, 0, PTE_MMAP) < 0){
+    return -1;
+  }
   filedup(p->ofile[fd]);
   p->highest_unused -= map_size;
-
+  
   return p->vma[vma_no].start_vp;
 }
 
@@ -185,14 +201,16 @@ sys_munmap(void)
     2.  当需要unmap部分片段时，需要释放掉相应的物理页和页表项，并修改vma中的offset和length
   */
   uint64 addr;
+  size_t length;
+  uint64 pgrd_addr;
   size_t unmap_size;
-  if((argaddr(0, &addr) < 0) || (argaddr(1, &unmap_size) < 0)  ){
+  if((argaddr(0, &addr) < 0) || (argaddr(1, &length) < 0)  ){
     return -1;
   }
 
   //对于给定的unmap地址和大小进行按页对齐
-  addr = PGROUNDDOWN(addr);
-  unmap_size = PGROUNDUP(unmap_size);
+  pgrd_addr = PGROUNDDOWN(addr);
+  unmap_size = PGROUNDUP(length);
 
   struct  proc *p = myproc();
 
@@ -205,7 +223,7 @@ sys_munmap(void)
   int mapped_flag = 0;
 
   //粗略判断给定的addr是否在mmap已映射的地址范围
-  if(addr < p->highest_unused){
+  if(pgrd_addr < p->highest_unused){
     return -1;
   }
 
@@ -214,7 +232,7 @@ sys_munmap(void)
   for(vma_no = 0; vma_no < MAX_VMA; vma_no++){
     start_vp = p->vma[vma_no].start_vp;
     map_size = p->vma[vma_no].map_size;
-    if(addr >= start_vp && addr <= start_vp + map_size){
+    if(pgrd_addr >= start_vp && pgrd_addr <= start_vp + map_size){
       mapped_flag = 1;
       break;
     }
@@ -223,6 +241,9 @@ sys_munmap(void)
     return -1;
   }
 
+ // printf("to unmap: addr %p, length %p. vma_no %d, vma start-vp %p, vma map-size %p\n", addr, length, vma_no, start_vp, map_size);
+  //printf("\n---in unmap: chekcking pagetable\n");
+  //vmprint(p->pagetable, 3);
   //进一步判断unmap的地址是否符合要求：
   //  位于映射范围的开头或结尾，
   //  不能把原来的映射范围分割成两半
@@ -230,10 +251,10 @@ sys_munmap(void)
   int unmap_at_head = 0;
   int unmap_at_tail = 0;
 
-  if(addr == start_vp){
+  if(pgrd_addr == start_vp){
     unmap_at_head = 1;
   }
-  if((addr + unmap_size) == (start_vp + map_size)){
+  if((pgrd_addr + unmap_size) == (start_vp + map_size)){
     unmap_at_tail = 1;
   }
 
@@ -251,14 +272,42 @@ sys_munmap(void)
   if(write_back){
     wb_offset = offset + addr - start_vp;
     struct file *f = (struct file *)p->vma[vma_no].filep;
-    struct inode *ip = f->ip;
 
-    ilock(ip);
-    writei(ip, 1, addr, wb_offset, unmap_size);
-    iunlock(ip);
+    int max = ((MAXOPBLOCKS-1-1-2) / 2) * BSIZE;
+
+    int i = 0;
+    int r = 0;
+
+    while(i < length){    
+      int n1 = length - i;
+      if(n1 > max)
+        n1 = max;
+
+      begin_op();
+      ilock(f->ip);
+      if ((r = writei(f->ip, 1, addr + i, wb_offset, n1)) > 0)
+        wb_offset += r;
+      iunlock(f->ip);
+      end_op();
+
+      if(r != n1){
+        // error from writei
+        break;
+      }
+      i += r;
+    }
   }
 
-  uvmunmap(p->pagetable, addr, unmap_size/PGSIZE, 1);
+  int npages = unmap_size / PGSIZE;
+
+  for(int i = 0; i < npages; i++){
+    if(walkaddr(p->pagetable, pgrd_addr) == 0){
+      uvmunmap(p->pagetable, pgrd_addr + i*PGSIZE, 1, 0);
+    } else{
+      uvmunmap(p->pagetable, pgrd_addr + i*PGSIZE, 1, 1);
+    }
+  }
+
 
   if(unmap_at_head && unmap_at_tail){
     p->vma[vma_no].used = 0;
@@ -275,6 +324,8 @@ sys_munmap(void)
     return 0;
   } else if (unmap_at_head){
     p->vma[vma_no].start_vp = addr + unmap_size;
+    p->vma[vma_no].offset += unmap_size;
+    p->vma[vma_no].map_size -= unmap_size;
     return 0;
   } else{
     p->vma[vma_no].map_size -= unmap_size;
