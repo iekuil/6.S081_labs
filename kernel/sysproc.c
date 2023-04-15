@@ -123,6 +123,7 @@ sys_mmap(void)
         (2)在VMA中记录虚拟地址空间的起点和终点；
 */
   struct  proc *p = myproc();
+  //printf("pid %d calling mmap\n", p->pid);
   size_t  length;
   int     prot;
   int     flags;
@@ -178,15 +179,26 @@ sys_mmap(void)
   p->vma[vma_no].flags = flags;
   p->vma[vma_no].offset = offset;
 
+  
+
   //这里会先将相应的虚拟地址在页表上映射到0，并标记为用户不可见
   //之后在trap处理的时候会unmap，再申请物理页面、mappage
   //这么干主要是防止有的页还没被懒拷贝到内存里，就unmap了，从而在unmap的时候会由于不存在相应的页表项而panic
-  if(mappages(p->pagetable, p->vma[vma_no].start_vp, p->vma[vma_no].map_size, 0, PTE_MMAP) < 0){
-    return -1;
-  }
+  //uint64 start_addr = p->vma[vma_no].start_vp;
+  //uint64 end_addr = p->vma[vma_no].start_vp + map_size;
+  //for(; start_addr < end_addr; start_addr += PGSIZE ){
+  //  if(mappages(p->pagetable, start_addr, PGSIZE, 0, PTE_MMAP) < 0){
+  //    return -1;
+  //  }
+  //}
+  //if(mappages(p->pagetable, p->vma[vma_no].start_vp, p->vma[vma_no].map_size, KERNBASE, PTE_MMAP) < 0){
+  //  return -1;
+  //}
   filedup(p->ofile[fd]);
   p->highest_unused -= map_size;
   
+  //printf("\n ---pid %d mmap: start_vp=%p, mapsize=%p\n", p->pid, p->vma[vma_no].start_vp, map_size);
+  //vmprint(p->pagetable, 3);
   return p->vma[vma_no].start_vp;
 }
 
@@ -208,11 +220,13 @@ sys_munmap(void)
     return -1;
   }
 
+
   //对于给定的unmap地址和大小进行按页对齐
   pgrd_addr = PGROUNDDOWN(addr);
   unmap_size = PGROUNDUP(length);
 
   struct  proc *p = myproc();
+  //printf("pid %d calling munmap\n", p->pid);
 
   int     flags;
   off_t   offset = 0;
@@ -299,15 +313,18 @@ sys_munmap(void)
   }
 
   int npages = unmap_size / PGSIZE;
-
+  //printf("\n---pid %d munmap, before. addr=%p, size=%p, num=%d\n", p->pid, pgrd_addr, unmap_size, npages);
+  //vmprint(p->pagetable, 3);
+  //这里似乎没能正确释放掉fork后进程的页面(×不是这里)
   for(int i = 0; i < npages; i++){
-    if(walkaddr(p->pagetable, pgrd_addr) == 0){
-      uvmunmap(p->pagetable, pgrd_addr + i*PGSIZE, 1, 0);
+    if(walkaddr(p->pagetable, pgrd_addr+ i*PGSIZE) == 0){
+      //uvmunmap(p->pagetable, pgrd_addr + i*PGSIZE, 1, 0);
     } else{
       uvmunmap(p->pagetable, pgrd_addr + i*PGSIZE, 1, 1);
     }
   }
-
+  //printf("\n---pid %d munmap, after\n", p->pid);
+  //vmprint(p->pagetable, 3);
 
   if(unmap_at_head && unmap_at_tail){
     p->vma[vma_no].used = 0;
@@ -321,11 +338,16 @@ sys_munmap(void)
     fileclose((struct file *)p->vma[vma_no].filep);
     p->vma[vma_no].filep = 0;
 
+    //printf("\n ----pid %d unmap\n", p->pid);
+    //vmprint(p->pagetable, 3);
+    
     return 0;
   } else if (unmap_at_head){
     p->vma[vma_no].start_vp = addr + unmap_size;
     p->vma[vma_no].offset += unmap_size;
     p->vma[vma_no].map_size -= unmap_size;
+
+    //printf("\n pid %d in munmap, updated vma %d, start_vp=%p, size=%p\n", p->pid, vma_no, p->vma[vma_no].start_vp, p->vma[vma_no].map_size);
     return 0;
   } else{
     p->vma[vma_no].map_size -= unmap_size;

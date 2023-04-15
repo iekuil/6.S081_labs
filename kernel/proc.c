@@ -290,6 +290,37 @@ growproc(int n)
   return 0;
 }
 
+//mmap: 为了fork()里面能拷贝mmap映射区域，把vm.c里面的uvmcopy函数搬过来改了改
+int
+uvmcopy_range(pagetable_t old, pagetable_t new, uint64 start_va, uint64 sz)
+{
+  pte_t *pte;
+  uint64 pa, i;
+  uint flags;
+  char *mem;
+
+  for(i = start_va; i < sz; i += PGSIZE){
+    if((pte = walk(old, i, 0)) == 0)
+      panic("uvmcopy: pte should exist");
+    if((*pte & PTE_V) == 0)
+      panic("uvmcopy: page not present");
+    pa = PTE2PA(*pte);
+    flags = PTE_FLAGS(*pte);
+    if((mem = kalloc()) == 0)
+      goto err;
+    memmove(mem, (char*)pa, PGSIZE);
+    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
+      kfree(mem);
+      goto err;
+    }
+  }
+  return 0;
+
+ err:
+  uvmunmap(new, 0, i / PGSIZE, 1);
+  return -1;
+}
+
 // Create a new process, copying the parent.
 // Sets up child kernel stack to return as if from fork() system call.
 int
@@ -311,6 +342,30 @@ fork(void)
     return -1;
   }
   np->sz = p->sz;
+  
+  //mmap: 逐个拷贝vma
+  np->highest_unused = p->highest_unused;
+  for(int vma_no = 0; vma_no < MAX_VMA; vma_no++){
+    uint64 used = np->vma[vma_no].used = p->vma[vma_no].used;
+    np->vma[vma_no].file_length = p->vma[vma_no].file_length;
+    uint64 filep = np->vma[vma_no].filep = p->vma[vma_no].filep;
+    np->vma[vma_no].flags = p->vma[vma_no].flags;
+    np->vma[vma_no].map_size = p->vma[vma_no].map_size;
+    np->vma[vma_no].offset = p->vma[vma_no].offset;
+    np->vma[vma_no].prot = p->vma[vma_no].prot;
+    np->vma[vma_no].start_vp = p->vma[vma_no].start_vp;
+
+    if(used == 0){
+      continue;
+    }
+    filedup((struct file*)filep);
+  }
+  //mmap：拷贝页表的对应区域
+  if(uvmcopy_range(p->pagetable, np->pagetable, p->highest_unused, TRAPFRAME-p->highest_unused) < 0){
+    freeproc(np);
+    release(&np->lock);
+    return -1;
+  }
 
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
@@ -374,6 +429,36 @@ exit(int status)
       fileclose(f);
       p->ofile[fd] = 0;
     }
+  }
+
+  //mmap：释放所有的mmap映射，且不对文件进行写入
+  for(int vma_no = 0; vma_no < MAX_VMA; vma_no++){  
+    if(p->vma[vma_no].used == 0){
+      continue;
+    }
+    uint64 unmap_size = p->vma[vma_no].map_size;    //这里要用uint64，之前用的int，自动进行符号拓展导致高位全为1，超出了MAXVA
+    uint64 unmap_addr = p->vma[vma_no].start_vp;
+    int npages = unmap_size / PGSIZE;
+
+    for(int i = 0; i < npages; i++){
+      
+      if(walkaddr(p->pagetable, unmap_addr + i*PGSIZE) == 0){ 
+        
+      } else{
+        uvmunmap(p->pagetable, unmap_addr + i*PGSIZE, 1, 1);
+      }
+    }
+
+    p->vma[vma_no].used = 0;
+    p->vma[vma_no].start_vp = 0;
+    p->vma[vma_no].map_size = 0;
+    p->vma[vma_no].prot = 0;
+    p->vma[vma_no].file_length = 0;
+    p->vma[vma_no].flags = 0;
+    p->vma[vma_no].offset = 0;
+
+    fileclose((struct file *)p->vma[vma_no].filep);
+    p->vma[vma_no].filep = 0;
   }
 
   begin_op();

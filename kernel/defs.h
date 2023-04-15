@@ -172,7 +172,8 @@ int             copyout(pagetable_t, uint64, char *, uint64);
 int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);
 
-void            vmprint(pagetable_t pagetable, int level);
+void            vmprint(pagetable_t pagetable, int level);      //mmap: 从之前的lab搬过来的，用来debug
+pte_t *         walk(pagetable_t pagetable, uint64 va, int alloc);  //mmap: 为了在proc.c的uvmcopy_range里面能够调用
 
 // plic.c
 void            plicinit(void);

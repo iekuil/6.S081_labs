@@ -101,7 +101,9 @@ lazy_mmap(void)
   if(prot_exec)
     perm |= PTE_X;
 
-  uvmunmap(p->pagetable, page_to_map, 1, 0);
+  //printf("problem here? 1, err_addr:%p, to_map:%p\n", err_va, page_to_map);
+  //uvmunmap(p->pagetable, page_to_map, 1, 0);
+  //printf("problem here? 2\n");
 
   char *pa;
   if((pa = kalloc()) == 0){
