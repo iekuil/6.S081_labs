@@ -1,0 +1,22 @@
+make: “kernel/kernel”已是最新。
+== Test running mmaptest == (1.7s) 
+== Test   mmaptest: mmap f == 
+  mmaptest: mmap f: OK 
+== Test   mmaptest: mmap private == 
+  mmaptest: mmap private: OK 
+== Test   mmaptest: mmap read-only == 
+  mmaptest: mmap read-only: OK 
+== Test   mmaptest: mmap read/write == 
+  mmaptest: mmap read/write: OK 
+== Test   mmaptest: mmap dirty == 
+  mmaptest: mmap dirty: OK 
+== Test   mmaptest: not-mapped unmap == 
+  mmaptest: not-mapped unmap: OK 
+== Test   mmaptest: two files == 
+  mmaptest: two files: OK 
+== Test   mmaptest: fork_test == 
+  mmaptest: fork_test: OK 
+== Test usertests == usertests: OK (143.7s) 
+== Test time == 
+time: OK 
+Score: 140/140
