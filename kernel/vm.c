@@ -434,22 +434,23 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 }
 
 void 
-vmprint(pagetable_t pagetable, int level)
+vmprint(pagetable_t pagetable, int level) //mmap: 现在才发现之前的vmprint写错了，改了一下
 {
-  printf("page table %p\n", pagetable);
+  if(level == 2){
+    printf("page table %p\n", pagetable);
+  }
   for(int i = 0; i < 512; i++){
     pte_t pte = pagetable[i];
     if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
       uint64 child = PTE2PA(pte);
       if(level == 2)
         printf("..%d: pte %p pa %p\n", i, pte, child);
-      if(level == 1)
+      else if(level == 1)
         printf(".. ..%d: pte %p pa %p\n", i, pte, child);
       vmprint((pagetable_t)child, level-1);
-    }else if(pte & PTE_V){
+    }else if((pte & PTE_V) && level == 0){
       uint64 pa = PTE2PA(pte);
       printf(".. .. ..%d: pte %p pa %p\n", i, pte, pa);
     }
-
   }
 }
